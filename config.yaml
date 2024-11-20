@@ -1,0 +1,7 @@
+wandb:
+  project: <YOUR_WANDB_PROJECT>
+  entity: <YOUR_WANDB_ENTITY>
+  key: <YOUR_WANDB_API_KEY>
+datasets:
+  innoterra:
+    root_dir: <PATH_TO_DATASET>
