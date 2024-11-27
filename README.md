@@ -1,6 +1,6 @@
 # Weakly Supervised Panoptic Segmentation for Banana Defects
 
-This repository contains supplementary code for the paper *Weakly supervised image segmentation for detecting bruises and scars on banana fruits*.
+This repository contains supplementary code for the paper [**Weakly supervised image segmentation for defect-based grading of fresh produce**](http://arxiv.org/abs/2411.16219).
 
 ## Setup
 
@@ -73,4 +73,16 @@ To run a model, use the following code, replacing `<path-to-checkpoint>` with th
     semantic_image = visualizer(semantic_mask)
     plt.imshow(semantic_image.permute(1, 2, 0))
     plt.show()
+```
+
+## Citation
+
+If you find this project useful, please consider citing our preprint:
+```
+@article{knott2024weakly,
+  title={Weakly supervised image segmentation for defect-based grading of fresh produce}, 
+  author={Manuel Knott and Divinefavour Odion and Sameer Sontakke and Anup Karwa and Thijs Defraeye}
+  journal={arXiv preprint arXiv:2411.16219},
+  year={2024}
+}
 ```
