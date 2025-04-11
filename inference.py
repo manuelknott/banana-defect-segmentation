@@ -1,6 +1,9 @@
+import os
+
 import numpy as np
 import matplotlib.pyplot as plt
 import PIL
+import yaml
 
 from transformers import MaskFormerForInstanceSegmentation, MaskFormerImageProcessor
 from utils.visualizer import SegmentationMapVisualizer
@@ -42,6 +45,9 @@ class_dict_bg_multi = {
     6: "new scar",
 }
 
+config = yaml.safe_load(open("config.yaml"))
+
+
 class BananaSegmentationModel:
 
     def __init__(self, checkpoint_path: str,
@@ -64,11 +70,12 @@ class BananaSegmentationModel:
             class_dict = class_dict_bg_multi
 
         self.model = MaskFormerForInstanceSegmentation.from_pretrained(checkpoint_path,
-                                                                  id2label=class_dict,
-                                                                  ignore_mismatched_sizes=True)
+                                                                       id2label=class_dict,
+                                                                       ignore_mismatched_sizes=True)
         self.model.eval()
-        self.img_processor = MaskFormerImageProcessor(ignore_index=255, do_resize=False, do_rescale=False, do_normalize=True,
-                                                 do_reduce_labels=False, image_mean=ADE_MEAN, image_std=ADE_STD)
+        self.img_processor = MaskFormerImageProcessor(ignore_index=255, do_resize=False, do_rescale=False,
+                                                      do_normalize=True,
+                                                      do_reduce_labels=False, image_mean=ADE_MEAN, image_std=ADE_STD)
 
     @staticmethod
     def create_semantic_mask(instance_mask, segments_info):
@@ -81,15 +88,14 @@ class BananaSegmentationModel:
 
         return semantic_mask
 
-
     def predict(self, image_path: str):
         img = PIL.Image.open(image_path)
         w, h = img.size
         inputs = self.img_processor(img, return_tensors="pt")
         outputs = self.model(**inputs)
         results = self.img_processor.post_process_panoptic_segmentation(outputs,
-                                                                   label_ids_to_fuse=self.non_defect_ids,
-                                                                   target_sizes=[(h, w)])
+                                                                        label_ids_to_fuse=self.non_defect_ids,
+                                                                        target_sizes=[(h, w)])
 
         instance_mask = results[0]["segmentation"]
         segments_info = results[0]["segments_info"]
@@ -98,10 +104,9 @@ class BananaSegmentationModel:
         return instance_mask, semantic_mask, segments_info
 
 
-
-
 if __name__ == '__main__':
-    model = BananaSegmentationModel("/mnt/hdd-4t/bananasam_checkpoints/ckpts/maskformer_split0_sam2_bg")
+    model = BananaSegmentationModel(
+        os.path.join(config["ckpt_dir"], "maskformer_split0_sam-h_bg"))
 
     instance_mask, semantic_mask, segments_info = model.predict("example.jpg")
 

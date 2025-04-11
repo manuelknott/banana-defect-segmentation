@@ -5,3 +5,4 @@ wandb:
 datasets:
   innoterra:
     root_dir: <PATH_TO_DATASET>
+ckpt_dir: <PATH_TO_CHECKPOINTS>

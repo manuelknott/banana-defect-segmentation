@@ -1,18 +1,23 @@
 import os
+import yaml
 from PIL import Image
 from matplotlib.patches import Rectangle
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import numpy as np
 import json
+import torch
 from segment_anything import SamPredictor, sam_model_registry
 from pycocotools import mask as maskUtils
 
-from sam2.sam2_image_predictor import SAM2ImagePredictor
+config = yaml.safe_load(open("config.yaml"))
 
 verbose = False
 
-ANALYSE_IOU_ONLY =False
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DATA_BASEPATH = config["datasets"]["innoterra"]["root_dir"]
+
+ANALYSE_IOU_ONLY = True
 
 SAM_CKPTS = {
     "vit_b": "models/custom_semantic_sam/ckpt_cache/sam_vit_b_01ec64.pth",
@@ -37,33 +42,32 @@ def get_iou(binary_array1, binary_array2):
 
     return iou_score
 
-annotations = json.load(open('/datasets/innoterra_segmentation/annotations.json'))
 
-def main(use_sam2:bool, sam_variant: str):
-    if use_sam2:
-        sam_model = sam_model_registry[f"vit_{sam_variant}"](checkpoint=SAM_CKPTS[f"vit_{sam_variant}"])
+annotations = json.load(open(f'{DATA_BASEPATH}/annotations.json'))
+
+
+def main(use_sam2: bool, sam_variant: str):
+    if not use_sam2:  # regular SAM
+        sam_model = sam_model_registry[f"vit_{sam_variant}"](checkpoint=SAM_CKPTS[f"vit_{sam_variant}"], device=DEVICE)
         sam = SamPredictor(sam_model)
     else:
-        sam = SAM2ImagePredictor.from_pretrained("facebook/sam2-hiera-large")
+        from sam2.sam2_image_predictor import SAM2ImagePredictor
+        assert sam_variant == "l", "only L implemented for SAM2"
+        sam = SAM2ImagePredictor.from_pretrained("facebook/sam2-hiera-large", device=DEVICE)
 
     img_id2path = {ann["id"]: ann["file_name"] for ann in annotations["images"]}
-
-    #def rle_list_to_string(rle_list):
-    #    return ' '.join(map(str, rle_list))
-
-
 
     all_iou = []
 
     for i in tqdm(range(len(annotations["annotations"]))):
         anno = annotations["annotations"][i]
         image_id = anno["image_id"]
-        image_path = os.path.join("/datasets/innoterra_segmentation/resized_images_1024", img_id2path[image_id])
+        image_path = os.path.join(f"{DATA_BASEPATH}/resized_images_1024", img_id2path[image_id])
 
         bbox = anno.get("bbox")
 
         if bbox is None:
-            continue # non-defect
+            continue  # non-defect
 
         x1, y1, w, h = bbox
         x2 = x1 + w
@@ -79,9 +83,9 @@ def main(use_sam2:bool, sam_variant: str):
         # compare sam mask with anno mask
         # first convert rle to binary
         anno_mask = maskUtils.decode(anno["segmentation"]).astype(np.bool_)
+        n_pixels = anno_mask.sum()
         # get iou
         iou = get_iou(anno_mask, best_sam_mask)
-        all_iou.append(iou)
 
         if verbose:
             fig, ax = plt.subplots(1, 3, figsize=(10, 5))
@@ -99,24 +103,24 @@ def main(use_sam2:bool, sam_variant: str):
         rle = (maskUtils.encode(np.asfortranarray(best_sam_mask)))
         rle["counts"] = rle["counts"].decode('utf-8')
 
-        #print(annotations["annotations"][i]["segmentation"])
+        # iou, n_pixels, image_path, gt_rle, pred_rle
+        all_iou.append((iou, n_pixels, image_path, anno["segmentation"], rle))
+
+        ### Update for jsjon file
         annotations["annotations"][i]["segmentation"] = rle
-        #print(annotations["annotations"][i]["segmentation"])
 
     # save all_iou to file
-    print(all_iou)
-    with open(f"analysis/{'sam2' if use_sam2 else 'sam'}_vit_{sam_variant}_iou.txt", "w") as f:
+    with open(f"plots/{'sam2' if use_sam2 else 'sam'}_vit_{sam_variant}_iou.txt", "w") as f:
         for iou in all_iou:
             f.write(f"{iou}\n")
 
-    # SAVE JSON
     if not ANALYSE_IOU_ONLY:
-        with open(f"/datasets/innoterra_segmentation/annotations_{'sam2' if use_sam2 else 'sam'}_vit_{sam_variant}.json", "w") as f:
+        with open(f"{DATA_BASEPATH}/annotations_{'sam2' if use_sam2 else 'sam'}_vit_{sam_variant}.json", "w") as f:
             json.dump(annotations, f)
-            print(f"Saved to /datasets/innoterra_segmentation/annotations_{'sam2' if use_sam2 else 'sam'}_vit_{sam_variant}.json")
+            print(f"Saved to {DATA_BASEPATH}/annotations_{'sam2' if use_sam2 else 'sam'}_vit_{sam_variant}.json")
+
 
 if __name__ == '__main__':
-    #main(use_sam2=False, sam_variant="b")
-    #main(use_sam2=False, sam_variant="l")
+    main(use_sam2=False, sam_variant="b")
+    main(use_sam2=False, sam_variant="l")
     main(use_sam2=False, sam_variant="h")
-    #main(use_sam2=True, sam_variant="l")

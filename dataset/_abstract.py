@@ -9,7 +9,7 @@ def load_datasets(dataset: str = "innoterra", seed: int = 42, fixed_splits_id=No
                   train_defect_ignore_pad_px: int = 0,
                   val_defect_ignore_pad_px: int = 0,
                   train_mask_source="annotated",
-                  val_mask_source="sam",
+                  val_mask_source="annotated",
                   **kwargs
                   ):
     """Returns a train and validation dataset."""

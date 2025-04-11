@@ -1,6 +1,9 @@
 # Weakly Supervised Panoptic Segmentation for Banana Defects
 
-This repository contains supplementary code for the paper [**Weakly supervised image segmentation for defect-based grading of fresh produce**](http://arxiv.org/abs/2411.16219).
+[![Paper](https://img.shields.io/badge/arXiv-PDF-b31b1b)](https://arxiv.org/abs/2411.16219)
+
+This repository contains supplementary code for the paper [**Weakly supervised panoptic segmentation for defect-based grading of fresh produce**](http://arxiv.org/abs/2411.16219).
+Accepted as a paper to **Agriculture-Vision: Challenges & Opportunities for Computer Vision in Agriculture (CVPR 2025 Workshops)**.
 
 ## Setup
 
@@ -80,7 +83,7 @@ To run a model, use the following code, replacing `<path-to-checkpoint>` with th
 If you find this project useful, please consider citing our preprint:
 ```
 @article{knott2024weakly,
-  title={Weakly supervised image segmentation for defect-based grading of fresh produce}, 
+  title={Weakly supervised panoptic segmentation for defect-based grading of fresh produce}, 
   author={Manuel Knott and Divinefavour Odion and Sameer Sontakke and Anup Karwa and Thijs Defraeye}
   journal={arXiv preprint arXiv:2411.16219},
   year={2024}

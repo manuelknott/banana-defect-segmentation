@@ -1,6 +1,5 @@
-import io
 import os
-from copy import copy, deepcopy
+from copy import deepcopy
 import torchvision.ops
 import yaml
 import json
@@ -47,12 +46,16 @@ class InnoterraDataset(Dataset):
                  preprocess_defects=False,  # recommended when only using a single defect class
                  ):
 
-        assert defect_mask_source in ["annotated", "sam", "sam2"]
+        assert defect_mask_source in ["annotated", "sam-b", "sam-l", "sam-h", "sam2-l"]
         if defect_mask_source == "annotated":
             self.annotations_path = os.path.join(self.root_dir, "annotations.json")
-        elif defect_mask_source == "sam":
+        elif defect_mask_source == "sam-b":
+            self.annotations_path = os.path.join(self.root_dir, "annotations_sam_vit_b.json")
+        elif defect_mask_source == "sam-l":
             self.annotations_path = os.path.join(self.root_dir, "annotations_sam_vit_l.json")
-        elif defect_mask_source == "sam2":
+        elif defect_mask_source == "sam-h":
+            self.annotations_path = os.path.join(self.root_dir, "annotations_sam_vit_h.json")
+        elif defect_mask_source == "sam2-l":
             self.annotations_path = os.path.join(self.root_dir, "annotations_sam2_vit_l.json")
         else:
             raise ValueError(f"Unknown defect_mask_source: {defect_mask_source}")
@@ -62,7 +65,17 @@ class InnoterraDataset(Dataset):
 
         self.augment = augment
         self.resolution = resolution
-        self.image_file_names = [f for f in os.listdir(self.img_dir) if f.endswith('.jpg')]
+
+        img_order_filepath = 'dataset/image_order.txt'
+        if os.path.isfile(img_order_filepath):
+            with open(img_order_filepath, 'r') as f:
+                self.image_file_names = f.read().splitlines()
+        else:
+            # careful, os.listdir yields different orders depending on OS
+            self.image_file_names = [f for f in os.listdir(self.img_dir)]
+
+        self.image_file_names = [f for f in self.image_file_names if f.endswith('.jpg')]
+
         self.defect_ignore_pad_px = defect_ignore_pad_px
 
         self.separate_background_banana = separate_background_banana
@@ -81,6 +94,8 @@ class InnoterraDataset(Dataset):
 
         if sample_ids is not None:  # used to sample train_test_split
             self.image_file_names = [self.image_file_names[i] for i in sample_ids]
+        #            print(self.image_file_names)
+        #            exit()
 
         if augment:
             self.transform = T2.Compose([
@@ -133,11 +148,12 @@ class InnoterraDataset(Dataset):
             defect_names = ["old bruise", "old scar", "new bruise", "new scar"]
         else:
             defect_names = ["defect"]
-        annotations["categories"] =  [{"id": i, "name": name} for i, name in enumerate(defect_names)]
+        annotations["categories"] = [{"id": i, "name": name} for i, name in enumerate(defect_names)]
 
         new_annotations = list()
         for a in annotations["annotations"]:
-            if a['image_id'] not in valid_image_ids or a['category_id'] not in [3, 4, 5, 6]:  # is there still a unclassified defect?
+            if a['image_id'] not in valid_image_ids or a['category_id'] not in [3, 4, 5,
+                                                                                6]:  # is there still a unclassified defect?
                 continue
             a['category_id'] = a['category_id'] - 3 if self.separate_defect_types else 0
             a["area"] = mask_utils.decode(a["segmentation"]).sum()  # TODO hotfix
@@ -191,7 +207,6 @@ class InnoterraDataset(Dataset):
 
         return np.where(global_mask, labels_im, 0)
 
-
     def _merge_classes(self, x: np.ndarray) -> np.ndarray:
 
         if self.annotation_type == "bboxes" or self.annotation_type == "bboxes-detr":
@@ -207,7 +222,7 @@ class InnoterraDataset(Dataset):
                 out = x.copy()
                 bg_mask = (x == 1)
                 fg_mask = (x == 2)
-                for defect_id in [3,4,5,6,7]:
+                for defect_id in [3, 4, 5, 6, 7]:
                     if not (x == defect_id).any():
                         continue
                     semantic_defect_mask = (x == defect_id)
@@ -261,7 +276,6 @@ class InnoterraDataset(Dataset):
             instance_mask = None
         else:
             bboxes, class_ids = None, None
-
 
         if self.annotation_type == "bboxes-detr":
             image_annos = self._read_bboxes_from_file(img_file_name)
@@ -369,11 +383,11 @@ class InnoterraDataset(Dataset):
 
     def _read_bboxes_from_file(self, image_filename: str):
         image_id = self.filenames_to_ids[image_filename]
-        annotations = deepcopy(self.annotations)  # TODO hotfix, make this not needed  or solve more elegantly
+        annotations = deepcopy(self.annotations)  # could be solved more elegantly
         relevant_annotations = [a for a in annotations['annotations'] if a['image_id'] == image_id and "bbox" in a]
         for a in relevant_annotations:
             a["area"] = mask_utils.decode(
-                a["segmentation"]).sum()  # TODO hotfix should be precalculated and added to json
+                a["segmentation"]).sum()  # could be precalculated and added to json
         return relevant_annotations
 
     def _load_bboxes(self, image_filename: str, shape) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -382,7 +396,7 @@ class InnoterraDataset(Dataset):
         annos = [torch.tensor(a['bbox']) for a in relevant_annotations]
 
         bboxes = torch.stack(annos) if annos else torch.empty((0, 4), dtype=torch.long)
-        bboxes = torchvision.ops.box_convert(bboxes, 'xywh', 'xyxy')  # convert from xywh to xyxy
+        bboxes = torchvision.ops.box_convert(bboxes, 'xywh', 'xyxy')
         bboxes = tv_tensors.BoundingBoxes(bboxes, format="XYXY", canvas_size=shape)
 
         class_ids = torch.tensor([a['category_id'] for a in relevant_annotations], dtype=torch.long)
@@ -390,66 +404,3 @@ class InnoterraDataset(Dataset):
         class_ids = self._merge_classes(class_ids)
 
         return bboxes, class_ids
-
-
-if __name__ == '__main__':
-
-    ds = InnoterraDataset(annotation_type="panoptic", augment=False, separate_defect_types=False,
-                          separate_background_banana=True, preprocess_defects=True)
-    batch = ds[0]
-    print(batch)
-
-    # TEST segmentation
-    if False:
-        ds = InnoterraDataset(augment=True, defect_ignore_pad_px=0, annotation_type="masks", separate_background_banana=True, merge_defect_masks_into_bananas=True)
-        for i in range(10):
-            vis = SegmentationMapVisualizer()
-            img, mask = ds[i]
-            plt.imshow(img.permute(1, 2, 0))
-            plt.show()
-            mask_vis = vis(mask)
-            plt.imshow(mask_vis.permute(1, 2, 0))
-            plt.show()
-
-    # TEST objdet
-    if False:
-        from torchvision.utils import draw_bounding_boxes
-        from torchvision.transforms.v2 import functional as F
-
-        ds = InnoterraDataset(annotation_type="bboxes", augment=False)
-        img, bboxes, labels = ds[10]
-        print(bboxes, labels)
-
-        viz = draw_bounding_boxes((img * 255.).to(torch.uint8), boxes=bboxes)
-        F.to_pil_image(viz).show()
-
-    # TEST both
-    if False:
-        ds = InnoterraDataset(annotation_type="masks+bboxes", augment=True)
-        img, mask, bboxes, labels = ds[10]
-        print(bboxes, labels)
-
-        vis = SegmentationMapVisualizer()
-        mask_vis = vis(mask)
-        plt.imshow(mask_vis.permute(1, 2, 0))
-        plt.show()
-
-        from torchvision.utils import draw_bounding_boxes
-        from torchvision.transforms.v2 import functional as F
-
-        viz = draw_bounding_boxes((img * 255.).to(torch.uint8), boxes=bboxes)
-        F.to_pil_image(viz).show()
-
-    # TEST panoptic
-    if False:
-        ds = InnoterraDataset(annotation_type="panoptic", augment=True)
-        img, _, mask, id_map = ds[-1]
-        print(id_map)
-
-        vis = SegmentationMapVisualizer(pallette="random")
-        mask_vis = vis(mask)
-        print(np.unique(mask))
-        plt.imshow(mask_vis.permute(1, 2, 0))
-        plt.show()
-
-        print(id_map)

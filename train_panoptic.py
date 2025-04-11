@@ -12,7 +12,8 @@ import torch
 from torch.utils.data import DataLoader
 import wandb
 from tqdm import tqdm
-from transformers import MaskFormerForInstanceSegmentation, MaskFormerImageProcessor, OneFormerImageProcessor, OneFormerForUniversalSegmentation
+from transformers import MaskFormerForInstanceSegmentation, MaskFormerImageProcessor, OneFormerImageProcessor, \
+    OneFormerForUniversalSegmentation
 from torchmetrics.detection import PanopticQuality, MeanAveragePrecision
 from pytorch_lightning import seed_everything
 
@@ -20,8 +21,6 @@ from dataset import load_datasets
 from evaluation.semantic_seg_metrics import SemanticSegmentationMetrics
 from utils.visualizer import SegmentationMapVisualizer
 from postprocess import postprocess_list, postprocess
-
-CHECKPOINT_DIR = "/mnt/hdd-4t/bananasam_checkpoints/ckpts"
 
 ADE_MEAN = np.array([123.675, 116.280, 103.530]) / 255
 ADE_STD = np.array([58.395, 57.120, 57.375]) / 255
@@ -35,7 +34,8 @@ parser.add_argument("--split_id", type=int, default=0)
 parser.add_argument("--batch_size", type=int, default=2)
 parser.add_argument("--epochs", type=int, default=100)
 parser.add_argument("--eval_every_epochs", type=int, default=5)
-parser.add_argument("--mask_source", type=str, choices=["annotated", "sam", "sam2"],  default="annotated")
+parser.add_argument("--mask_source", type=str, choices=["annotated", "sam-b", "sam-l", "sam-h", "sam2-l"],
+                    default="annotated")
 parser.add_argument("--eval_anno", action="store_true")
 parser.add_argument("--separate_defect_types", action="store_true")
 parser.add_argument("--separate_background_banana", action="store_true")
@@ -45,6 +45,7 @@ parser.add_argument("--eval_only", action="store_true")
 args = parser.parse_args()
 
 config = yaml.load(open("config.yaml", "r"), Loader=yaml.FullLoader)
+
 wandb.login(key=config['wandb']['key'])
 
 log_dict = dict()
@@ -223,14 +224,15 @@ def evaluate(model, dataloader, subset: str = "val", n_vis_imgs: int = 5):
                 _pred_masks.append(_pred_mask)
                 _pred_bbox = binarymask2bbox(_pred_mask)
                 _pred_boxes.append(_pred_bbox)
-                _pred_labels.append(torch.LongTensor([segment_info["label_id"]]) - (3 if args.separate_background_banana else 2))
+                _pred_labels.append(
+                    torch.LongTensor([segment_info["label_id"]]) - (3 if args.separate_background_banana else 2))
                 _pred_scores.append(torch.FloatTensor([segment_info["score"]]))
             detection_preds = [{
-                      "boxes": torch.stack(_pred_boxes) if len(_pred_boxes) > 0 else torch.zeros((0, 4)),
-                      "masks": torch.stack(_pred_masks) if len(_pred_masks) > 0 else torch.zeros((0, 1024, 1024)),
-                      "labels": torch.cat(_pred_labels) if len(_pred_labels) > 0 else torch.LongTensor([]),
-                      "scores": torch.cat(_pred_scores) if len(_pred_scores) > 0 else torch.FloatTensor([])
-                      }]
+                "boxes": torch.stack(_pred_boxes) if len(_pred_boxes) > 0 else torch.zeros((0, 4)),
+                "masks": torch.stack(_pred_masks) if len(_pred_masks) > 0 else torch.zeros((0, 1024, 1024)),
+                "labels": torch.cat(_pred_labels) if len(_pred_labels) > 0 else torch.LongTensor([]),
+                "scores": torch.cat(_pred_scores) if len(_pred_scores) > 0 else torch.FloatTensor([])
+            }]
 
             _gt_boxes = list()
             _gt_masks = list()
@@ -244,10 +246,10 @@ def evaluate(model, dataloader, subset: str = "val", n_vis_imgs: int = 5):
                 _gt_boxes.append(gt_bbox)
                 _gt_labels.append(torch.LongTensor([class_label]) - (3 if args.separate_background_banana else 2))
             detection_targets = [{
-                        "boxes": torch.stack(_gt_boxes) if len(_gt_boxes) > 0 else torch.zeros((0, 4)),
-                        "masks": torch.stack(_gt_masks) if len(_gt_masks) > 0 else torch.zeros((0, 1024, 1024)),
-                        "labels": torch.cat(_gt_labels) if len(_gt_labels) > 0 else torch.LongTensor([])
-                        }]
+                "boxes": torch.stack(_gt_boxes) if len(_gt_boxes) > 0 else torch.zeros((0, 4)),
+                "masks": torch.stack(_gt_masks) if len(_gt_masks) > 0 else torch.zeros((0, 1024, 1024)),
+                "labels": torch.cat(_gt_labels) if len(_gt_labels) > 0 else torch.LongTensor([])
+            }]
 
             detection_metrics.update(detection_preds, detection_targets)
             ###########################
@@ -267,7 +269,7 @@ def evaluate(model, dataloader, subset: str = "val", n_vis_imgs: int = 5):
                 ax[0].imshow(unnormalize(img).permute(1, 2, 0).cpu())
                 ax[1].imshow(semantic_visualizer(gt_semantic_mask.detach().cpu()).permute(1, 2, 0))
                 ax[2].imshow(semantic_visualizer(pred_semantic_mask.detach().cpu()).permute(1, 2, 0))
-                #ax[3].imshow(instance_visualizer(pred_instance_mask.detach().cpu()).permute(1, 2, 0))
+                # ax[3].imshow(instance_visualizer(pred_instance_mask.detach().cpu()).permute(1, 2, 0))
                 # plot bounding boxes around ax[1]
                 for box, label in zip(_gt_boxes, _gt_labels):
                     x1, y1, x2, y2 = box
@@ -285,7 +287,6 @@ def evaluate(model, dataloader, subset: str = "val", n_vis_imgs: int = 5):
                     _color = [c / 255 for c in _color]
                     rect = Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=1, edgecolor=_color, facecolor='none')
                     ax[2].add_patch(rect)
-
 
                 for _ax in ax.ravel():
                     _ax.axis("off")
@@ -320,11 +321,11 @@ def evaluate(model, dataloader, subset: str = "val", n_vis_imgs: int = 5):
         log_dict[f"val_map_{_class}"] = _class_map if _class_map != -1. else 0.
         log_dict[f"val_mar100_{_class}"] = _class_mar100 if _class_mar100 != -1. else 0.
 
-
     # save eval results to file
-    with open(f"{CHECKPOINT_DIR}/{run_name}/eval_results{'_pp' if args.postprocess else ''}{'_evalanno' if args.eval_anno else ''}.pkl", "wb") as f:
+    with open(
+            f"{config['ckpt_dir']}/{run_name}/eval_results{'_pp' if args.postprocess else ''}{'_evalanno' if args.eval_anno else ''}.pkl",
+            "wb") as f:
         pickle.dump(log_dict, f)
-
 
     wandb.log(log_dict)
     print(log_dict)
@@ -333,10 +334,12 @@ def evaluate(model, dataloader, subset: str = "val", n_vis_imgs: int = 5):
     if pq > best_metric and not args.eval_only:
         best_metric = pq
         print(f"saving new best model with PQ={pq} at epoch {epoch}")
-        model.save_pretrained(f"{CHECKPOINT_DIR}/{run_name}")
+        model.save_pretrained(f"{config['ckpt_dir']}/{run_name}")
 
     # save all results to pickle
-    with open(f"{CHECKPOINT_DIR}/{run_name}/predictions{'_pp' if args.postprocess else ''}{'_evalanno' if args.eval_anno else ''}.pkl", "wb") as f:
+    with open(
+            f"{config['ckpt_dir']}/{run_name}/predictions{'_pp' if args.postprocess else ''}{'_evalanno' if args.eval_anno else ''}.pkl",
+            "wb") as f:
         pickle.dump(all_results, f)
 
 
@@ -347,11 +350,8 @@ if __name__ == '__main__':
     now_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     run_name = args.run_name if args.run_name is not None else f"maskformer_split{args.split_id}"
 
-    if args.mask_source == "sam":
-        run_name += "_sam"
-
-    if args.mask_source == "sam2":
-        run_name += "_sam2"
+    if args.mask_source.startswith("sam"):
+        run_name += f"_{args.mask_source}"
 
     if args.separate_background_banana:
         run_name += "_bg"
@@ -360,14 +360,14 @@ if __name__ == '__main__':
         run_name += "_defects"
 
     print(f"======Starting run {run_name}=======")
-    os.makedirs(f"{CHECKPOINT_DIR}/{run_name}", exist_ok=True)
+    os.makedirs(f"{config['ckpt_dir']}/{run_name}", exist_ok=True)
 
     if not args.eval_only:
-        wandb_run = wandb.init(project="bananasam_panoptic",
-                               group="maskformer",
+        wandb_run = wandb.init(project=config["wandb"]["project"],
+                               group=args.model,
                                name=run_name,
                                config=vars(args),
-                               entity="mknott",
+                               entity=config["wandb"]["entity"],
                                mode="offline" if args.debug else "online"
                                )
     else:
@@ -378,15 +378,14 @@ if __name__ == '__main__':
                                                separate_background_banana=args.separate_background_banana,
                                                separate_defect_types=args.separate_defect_types,
                                                preprocess_defects=not args.separate_defect_types,
-                                               train_mask_source = args.mask_source,
-                                               val_mask_source = "annotated" if args.eval_anno else args.mask_source,
+                                               train_mask_source=args.mask_source,
+                                               val_mask_source="annotated" if args.eval_anno else args.mask_source,
                                                )
-
 
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=collate_fn)
 
-    ckpt_path = f"{CHECKPOINT_DIR}/{run_name}" if args.eval_only else "facebook/maskformer-swin-base-ade"
+    ckpt_path = f"{config['ckpt_dir']}/{run_name}" if args.eval_only else "facebook/maskformer-swin-base-ade"
     model = MaskFormerForInstanceSegmentation.from_pretrained(ckpt_path,
                                                               id2label=train_dataset.class_dict,
                                                               ignore_mismatched_sizes=True)
@@ -403,16 +402,15 @@ if __name__ == '__main__':
             else:
                 log_dict = dict()
 
-
     print("Evaluating model on validation set")
-    epoch=0
+    epoch = 0
     if not args.eval_only:
         #  reload best model
         print("Reloading best model for eval")
-        ckpt_path = f"{CHECKPOINT_DIR}/{run_name}"
+        ckpt_path = f"{config['ckpt_dir']}/{run_name}"
         model = MaskFormerForInstanceSegmentation.from_pretrained(ckpt_path,
                                                                   id2label=train_dataset.class_dict,
                                                                   ignore_mismatched_sizes=True)
         model.to(device)
 
-    evaluate(model, val_dataloader,"val", n_vis_imgs=-1)
+    evaluate(model, val_dataloader, "val", n_vis_imgs=-1)
