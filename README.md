@@ -5,6 +5,10 @@
 This repository contains supplementary code for the paper [**Weakly supervised panoptic segmentation for defect-based grading of fresh produce**](http://arxiv.org/abs/2411.16219).
 Accepted as a paper to **Agriculture-Vision: Challenges & Opportunities for Computer Vision in Agriculture (CVPR 2025 Workshops)**.
 
+## Dataset
+
+We are happy to share our dataset (images + panoptic masks in COCO format) for non-commercial purposes. Feel free to reach out to manuel.knott@alumni.ethz.ch to obtain access.
+
 ## Setup
 
 This repository was tested using Python 3.11 and Pytorch 2.4.1.
