@@ -7,7 +7,8 @@ Accepted as a paper to **Agriculture-Vision: Challenges & Opportunities for Comp
 
 ## Dataset
 
-We are happy to share our dataset (images + panoptic masks in COCO format) for non-commercial purposes. Feel free to reach out to manuel.knott@alumni.ethz.ch to obtain access.
+The raw dataset is available for non-commercial purposes (CC-BY-NC-4.0) on [HuggingFace](https://huggingface.co/datasets/manuelknott/banana-defects-panoptic/blob/main/README.md).
+We recommend using the dataset together with the [dataloader implementation](https://github.com/manuelknott/banana-defect-segmentation/blob/0b6440b585b6cfad2558c8dc58a3976abd851775/train_panoptic.py#L376) in this repository, as it contains useful utility functions such as train/eval split, preprocessing (merging) overlapping defects, and aggregating defect classes.
 
 ## Setup
 
@@ -86,10 +87,11 @@ To run a model, use the following code, replacing `<path-to-checkpoint>` with th
 
 If you find this project useful, please consider citing our preprint:
 ```
-@article{knott2024weakly,
-  title={Weakly supervised panoptic segmentation for defect-based grading of fresh produce}, 
-  author={Manuel Knott and Divinefavour Odion and Sameer Sontakke and Anup Karwa and Thijs Defraeye}
-  journal={arXiv preprint arXiv:2411.16219},
-  year={2024}
+@inproceedings{knott2025weakly,
+    title={Weakly Supervised Panoptic Segmentation for Defect-Based Grading of Fresh Produce},
+    author={Knott, Manuel and Odion, Divinefavour and Sontakke, Sameer and Karwa, Anup and Defraeye, Thijs},
+    booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) Workshops},
+    year={2025},
+    pages={5471-5480}
 }
 ```
